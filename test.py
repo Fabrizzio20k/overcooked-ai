@@ -35,7 +35,7 @@ def evaluate_model():
     timestep = 0
 
     while not done and timestep < horizon:
-        obs = env.lossless_state_encoding_mdp(env.state)
+        obs = env.featurize_state_mdp(env.state)
         agent_obs = np.array(obs[agent_idx], dtype=np.float32)
 
         action, _ = model.predict(agent_obs, deterministic=True)

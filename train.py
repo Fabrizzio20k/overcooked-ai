@@ -32,7 +32,7 @@ class FCPOvercookedEnv(gym.Env):
         self.agent_idx = np.random.choice([0, 1])
         self.current_partner.set_agent_index(1 - self.agent_idx)
 
-        obs = self.base_env.lossless_state_encoding_mdp(self.base_env.state)
+        obs = self.base_env.featurize_state_mdp(self.base_env.state)
         return np.array(obs[self.agent_idx], dtype=np.float32)
 
     def step(self, action):
@@ -45,7 +45,7 @@ class FCPOvercookedEnv(gym.Env):
         joint_action[1 - self.agent_idx] = partner_action
 
         next_state, reward, done, info = self.base_env.step(joint_action)
-        obs = self.base_env.lossless_state_encoding_mdp(self.base_env.state)
+        obs = self.base_env.featurize_state_mdp(self.base_env.state)
 
         return np.array(obs[self.agent_idx], dtype=np.float32), reward, done, info
 

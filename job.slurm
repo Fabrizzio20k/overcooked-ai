@@ -6,10 +6,8 @@
 #SBATCH --ntasks=1                    # Número de tareas (procesos)
 #SBATCH --cpus-per-task=4             # Número de cores de CPU asignados
 #SBATCH --mem=32G                     # Memoria RAM solicitada
-
-
-#SBATCH --nodelist=ag001
-#SBATCH --gres=gpu:1
+#SBATCH --partition=gpu               # Obligatorio para acceder a los nodos con GPU
+#SBATCH --gres=gpu:a100:1             # Pide exclusivamente la poderosa NVIDIA A100
 
 module load python3/3.13.2 
 

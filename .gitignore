@@ -225,7 +225,6 @@ runs/
 logs/
 checkpoints/
 wandb/
-data/
 datasets/
 videos/
 frames/

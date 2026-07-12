@@ -1,5 +1,3 @@
-#!/bin/bash
-
 #SBATCH --job-name=train_gpu          # Nombre del trabajo
 #SBATCH --output=res_%j.txt           # Archivo de salida (%j se reemplaza por el ID del trabajo)
 #SBATCH --error=err_%j.txt            # Archivo de errores

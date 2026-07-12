@@ -1,14 +1,11 @@
 import numpy as np
+np.Inf = np.inf
+np.NaN = np.nan
+
 from stable_baselines3 import PPO
 from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
 from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
 from overcooked_ai_py.agents.agent import GreedyHumanModel, RandomAgent
-import numpy as np
-
-np.Inf = np.inf  # <--- Agrega esto
-np.NaN = np.nan  # <--- Y esto por si acaso
-
-
 def evaluate_model():
     model_path = "models/ppo_fcp_overcooked"
     try:

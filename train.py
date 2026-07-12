@@ -2,6 +2,12 @@ import numpy as np
 np.Inf = np.inf
 np.NaN = np.nan
 
+from overcooked_ai_py.mdp.actions import Action
+def custom_action_sample(action_probs):
+    idx = np.random.choice(len(Action.ALL_ACTIONS), p=action_probs)
+    return Action.ALL_ACTIONS[idx]
+Action.sample = staticmethod(custom_action_sample)
+
 import gym
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env

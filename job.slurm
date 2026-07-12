@@ -8,8 +8,8 @@
 #SBATCH --mem=32G                     # Memoria RAM solicitada
 
 
-SBATCH --nodelist=ag001
-SBATCH --gres=gpu:1
+#SBATCH --nodelist=ag001
+#SBATCH --gres=gpu:1
 
 module load python3/3.13.2 
 

@@ -23,6 +23,9 @@ class FCPOvercookedEnv(gym.Env):
         self.current_partner = None
         self.agent_idx = 0
 
+    def seed(self, seed=None):
+        pass
+
     def reset(self):
         self.base_env.reset()
         self.current_partner = np.random.choice(self.partners)

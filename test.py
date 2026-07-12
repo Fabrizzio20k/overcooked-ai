@@ -47,11 +47,8 @@ def evaluate_model():
         action, _ = model.predict(agent_obs, deterministic=True)
         partner_action, _ = partner.action(env.state)
 
-        if isinstance(partner_action, tuple):
-            partner_action = partner_action[0]
-
         joint_action = [None, None]
-        joint_action[agent_idx] = int(action)
+        joint_action[agent_idx] = Action.ALL_ACTIONS[int(action)]
         joint_action[1 - agent_idx] = partner_action
 
         next_state, reward, done, info = env.step(joint_action)

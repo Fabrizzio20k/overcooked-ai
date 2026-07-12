@@ -43,11 +43,9 @@ class FCPOvercookedEnv(gym.Env):
 
     def step(self, action):
         partner_action, _ = self.current_partner.action(self.base_env.state)
-        if isinstance(partner_action, tuple):
-            partner_action = partner_action[0]
 
         joint_action = [None, None]
-        joint_action[self.agent_idx] = action
+        joint_action[self.agent_idx] = Action.ALL_ACTIONS[int(action)]
         joint_action[1 - self.agent_idx] = partner_action
 
         next_state, reward, done, info = self.base_env.step(joint_action)

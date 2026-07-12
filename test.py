@@ -6,6 +6,7 @@ from stable_baselines3 import PPO
 from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
 from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
 from overcooked_ai_py.agents.agent import GreedyHumanModel, RandomAgent
+from overcooked_ai_py.planning.planners import MediumLevelActionManager, NO_COUNTERS_PARAMS
 def evaluate_model():
     model_path = "models/ppo_fcp_overcooked"
     try:
@@ -18,7 +19,8 @@ def evaluate_model():
     mdp = OvercookedGridworld.from_layout_name("cramped_room")
     env = OvercookedEnv.from_mdp(mdp, horizon=horizon)
 
-    partner = GreedyHumanModel(mdp)
+    mlam = MediumLevelActionManager.from_pickle_or_compute(mdp, NO_COUNTERS_PARAMS, force_compute=False)
+    partner = GreedyHumanModel(mlam)
     agent_idx = 0
     partner.set_agent_index(1 - agent_idx)
 

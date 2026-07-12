@@ -8,6 +8,7 @@ from stable_baselines3.common.env_util import make_vec_env
 from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
 from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
 from overcooked_ai_py.agents.agent import RandomAgent, GreedyHumanModel
+from overcooked_ai_py.planning.planners import MediumLevelActionManager, NO_COUNTERS_PARAMS
 class FCPOvercookedEnv(gym.Env):
     def __init__(self, layout_name="cramped_room"):
         super(FCPOvercookedEnv, self).__init__()
@@ -17,7 +18,8 @@ class FCPOvercookedEnv(gym.Env):
         self.action_space = gym.spaces.Discrete(6)
         self.observation_space = gym.spaces.Box(low=0, high=1, shape=(96,), dtype=np.float32)
 
-        self.partners = [RandomAgent(), GreedyHumanModel(self.mdp)]
+        self.mlam = MediumLevelActionManager.from_pickle_or_compute(self.mdp, NO_COUNTERS_PARAMS, force_compute=False)
+        self.partners = [RandomAgent(), GreedyHumanModel(self.mlam)]
         self.current_partner = None
         self.agent_idx = 0
 

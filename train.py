@@ -5,6 +5,10 @@ from stable_baselines3.common.env_util import make_vec_env
 from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
 from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
 from overcooked_ai_py.agents.agent import RandomAgent, GreedyHumanModel
+import numpy as np
+
+np.Inf = np.inf  # <--- Agrega esto
+np.NaN = np.nan  # <--- Y esto por si acaso
 
 
 class FCPOvercookedEnv(gym.Env):

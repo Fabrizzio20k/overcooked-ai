@@ -80,6 +80,17 @@ class MultiMapTrainEnv(gym.Env):
 
 def train():
     os.makedirs("models", exist_ok=True)
+    
+    # Pre-compute motion planners sequentially to avoid parallel write race conditions
+    print("Pre-computing motion planners sequentially...")
+    from overcooked_ai_py.planning.planners import MediumLevelActionManager, NO_COUNTERS_PARAMS
+    layouts = ["cramped_room", "asymmetric_advantages", "coordination_ring", "forced_coordination", "counter_circuit"]
+    for layout in layouts:
+        print(f"  Pre-computing layout: {layout}...")
+        mdp = OvercookedGridworld.from_layout_name(layout)
+        MediumLevelActionManager.from_pickle_or_compute(mdp, NO_COUNTERS_PARAMS, force_compute=False)
+    print("All layout planners pre-computed successfully!")
+
     # 16 parallel environments. Each will load one of the 5 layouts cyclically.
     env = make_vec_env(lambda env_id=0: MultiMapTrainEnv(env_id), n_envs=16, vec_env_cls=SubprocVecEnv)
     

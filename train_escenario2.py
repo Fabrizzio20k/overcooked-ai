@@ -49,6 +49,8 @@ class Escenario2TrainEnv(gym.Env):
         return np.array(obs[self.agent_idx], dtype=np.float32), reward, done, info
 
 def train():
+    import os
+    os.makedirs("models", exist_ok=True)
     env = make_vec_env(lambda: Escenario2TrainEnv(), n_envs=16, vec_env_cls=SubprocVecEnv)
     model = PPO(
         "MlpPolicy",
@@ -62,8 +64,8 @@ def train():
     )
     print("Training PPO model for Escenario 2 for 1,000,000 steps...")
     model.learn(total_timesteps=1_000_000)
-    model.save("ppo_escenario2")
-    print("Saved model to ppo_escenario2.zip!")
+    model.save("models/ppo_escenario2")
+    print("Saved model to models/ppo_escenario2.zip!")
 
 if __name__ == "__main__":
     train()

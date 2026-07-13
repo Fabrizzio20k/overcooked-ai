@@ -16,7 +16,7 @@ policies:
       avoid_teammate: true
       teammate_aware: true
       use_ppo: true
-      ppo_model_path: ppo_fcp_overcooked.zip
+      ppo_model_path: models/ppo_escenario2.zip
     random_action_prob: 0.0
     max_action_time_ms: 100
     invalid_action: stay

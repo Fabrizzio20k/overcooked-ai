@@ -44,7 +44,9 @@ class CompetitionEnv(gym.Env):
         layout, ingredient, noise = SCENARIOS[env_id % len(SCENARIOS)]
 
         self.mdp = OvercookedGridworld.from_layout_name(layout)
-        self.base_env = OvercookedEnv.from_mdp(self.mdp, horizon=400)
+        self.base_env = OvercookedEnv.from_mdp(
+            self.mdp, horizon=400, old_dynamics=True  # must match evaluation YAMLs
+        )
 
         self.action_space = gym.spaces.Discrete(6)
         self.observation_space = gym.spaces.Box(

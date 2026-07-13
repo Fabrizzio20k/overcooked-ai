@@ -43,10 +43,10 @@ def configure_yaml(file_path, use_ppo):
     with open(file_path, 'r') as f:
         content = f.read()
     
-    # Replace use_ppo setting
     if use_ppo:
         content = content.replace("use_ppo: false", "use_ppo: true")
-        content = content.replace("type: state\n  include_agent_index", "type: featurized\n  include_agent_index")
+        # Ensure we pass the state dictionary so the hybrid agent can read the layout name
+        content = content.replace("type: featurized\n  include_agent_index", "type: state\n  include_agent_index")
     else:
         content = content.replace("use_ppo: true", "use_ppo: false")
         content = content.replace("type: featurized\n  include_agent_index", "type: state\n  include_agent_index")

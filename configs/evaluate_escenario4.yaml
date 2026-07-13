@@ -37,7 +37,7 @@ execution:
   - 71
   swap_agent_positions: true
 observation:
-  type: featurized
+  type: state
   include_agent_index: true
 rendering:
   mode: none

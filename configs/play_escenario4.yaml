@@ -39,7 +39,7 @@ observation:
   type: featurized
   include_agent_index: true
 rendering:
-  mode: human
+  mode: window
   fps: 5
   save_gif: false
 logging:

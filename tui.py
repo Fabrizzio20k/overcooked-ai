@@ -186,7 +186,7 @@ def main():
             
         scenario = int(choice)
         
-        is_ppo = True
+        is_ppo = (scenario != 4)
         
         # Choose mode
         print(f"\n{BOLD}Selecciona el modo de ejecución:{RESET}")

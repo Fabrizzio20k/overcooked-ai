@@ -14,27 +14,33 @@ from overcooked_ai_py.mdp.actions import Action
 from policies.basic_policies import GreedyFullTaskPolicy
 from src.policy_wrappers import EpsilonActionWrapper
 
-# ── Exact competition scenario definitions ─────────────────────────────────
-# ── Competition scenarios (HIGH priority — 3 envs each) ───────────────────
+# ── Competition scenarios (HIGH priority — 4 envs each = 12 envs) ─────────
 # (layout, agent_ingredient, partner_ingredient, noise)
 COMPETITION = [
     ("asymmetric_advantages",   "onion",   "onion",   0.00),   # Escenario 1
     ("coordination_ring",       "onion",   "onion",   0.25),   # Escenario 2
-    ("counter_circuit",         "tomato",  "onion",   0.35),   # Escenario 3 — agent=tomato, partner=onion
+    ("counter_circuit",         "tomato",  "onion",   0.35),   # Escenario 3
 ]
 
-# ── Extra layouts for generalization (LOW priority — 1 env each) ───────────
+# ── Generalization layouts (LOW priority — 1 env each = 12 envs) ──────────
+# Covers diverse unseen layouts the professor may use in Scenarios 4-6
 EXTRA = [
-    ("cramped_room",            "onion",   "onion",   0.00),
-    ("forced_coordination",     "onion",   "onion",   0.00),
-    ("large_room",              "onion",   "onion",   0.00),
-    ("small_corridor",          "onion",   "onion",   0.00),
-    ("soup_coordination",       "onion",   "onion",   0.00),
-    ("corridor",                "onion",   "onion",   0.00),
+    ("cramped_room",              "onion",  "onion",  0.00),
+    ("forced_coordination",       "onion",  "onion",  0.00),
+    ("large_room",                "onion",  "onion",  0.00),
+    ("small_corridor",            "onion",  "onion",  0.20),
+    ("soup_coordination",         "onion",  "onion",  0.00),
+    ("corridor",                  "onion",  "onion",  0.20),
+    ("five_by_five",              "onion",  "onion",  0.00),
+    ("cramped_room_tomato",       "tomato", "tomato", 0.00),
+    ("asymmetric_advantages_tomato", "tomato", "tomato", 0.00),
+    ("forced_coordination_tomato","tomato", "tomato", 0.00),
+    ("bottleneck",                "onion",  "onion",  0.20),
+    ("unident",                   "onion",  "onion",  0.20),
 ]
 
-# Final list: competition x3 + extras x1  →  15 total envs
-SCENARIOS = (COMPETITION * 3) + EXTRA
+# competition x4 + extras x1  →  24 total envs
+SCENARIOS = (COMPETITION * 4) + EXTRA
 # ──────────────────────────────────────────────────────────────────────────
 
 class CompetitionEnv(gym.Env):
@@ -106,11 +112,8 @@ def train():
         )
     print("Done!\n")
 
-    # ── 15 parallel envs cycling through the 3 competition scenarios ───────
-    # env_id 0,3,6,9,12  → Escenario 1 (asymmetric_advantages)
-    # env_id 1,4,7,10,13 → Escenario 2 (coordination_ring)
-    # env_id 2,5,8,11,14 → Escenario 3 (counter_circuit)
-    N_ENVS = 15
+    # ── 24 parallel envs: 12 competition (4x each) + 12 generalization ────
+    N_ENVS = 24
     env = make_vec_env(
         lambda env_id=0: CompetitionEnv(env_id),
         n_envs=N_ENVS,
@@ -121,22 +124,21 @@ def train():
         "MlpPolicy",
         env,
         verbose=1,
-        # ── Tuned hyperparameters ──────────────────────────────────────────
         learning_rate=3e-4,
-        n_steps=1024,          # steps per env before update  (15*1024=15 360 total)
-        batch_size=512,        # larger batches → more stable gradients
+        n_steps=1024,          # 24*1024 = 24 576 steps per update
+        batch_size=512,
         n_epochs=8,
         gamma=0.99,
         gae_lambda=0.95,
         clip_range=0.2,
-        ent_coef=0.01,         # encourage exploration early on
+        ent_coef=0.01,
         vf_coef=0.5,
         max_grad_norm=0.5,
-        policy_kwargs=dict(net_arch=[256, 256]),  # bigger network than default [64, 64]
+        policy_kwargs=dict(net_arch=[256, 256]),
     )
 
-    total_steps = 8_000_000
-    print(f"Training ONE general PPO agent on the 3 competition scenarios ({total_steps:,} steps)…")
+    total_steps = 10_000_000   # ~90 min on Khipu
+    print(f"Training general PPO agent on {len(set(SCENARIOS))} unique layouts ({total_steps:,} steps)…")
     model.learn(total_timesteps=total_steps)
     model.save("models/ppo_general_agent")
     print("\nSaved → models/ppo_general_agent.zip")

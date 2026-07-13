@@ -15,7 +15,8 @@ policies:
       ingredient: tomato
       avoid_teammate: true
       teammate_aware: true
-      use_ppo: false
+      use_ppo: true
+      ppo_model_path: models/ppo_general_agent.zip
     random_action_prob: 0.0
     max_action_time_ms: 100
     invalid_action: stay
@@ -35,7 +36,7 @@ execution:
   - 67
   swap_agent_positions: false
 observation:
-  type: state
+  type: featurized
   include_agent_index: true
 rendering:
   mode: window

@@ -53,13 +53,39 @@ class StudentAgent:
     def _load_ppo_model(self):
         if os.path.exists(self.ppo_model_path):
             try:
+                import torch
+                import torch.nn as nn
+                
+                class PolicyNetwork(nn.Module):
+                    def __init__(self):
+                        super().__init__()
+                        self.net = nn.Sequential(
+                            nn.Linear(96, 64),
+                            nn.Tanh(),
+                            nn.Linear(64, 64),
+                            nn.Tanh(),
+                            nn.Linear(64, 6)
+                        )
+                    def forward(self, x):
+                        return self.net(x)
+
+                self.pytorch_model = PolicyNetwork()
+                try:
+                    self.pytorch_model.load_state_dict(torch.load(self.ppo_model_path, map_location="cpu"))
+                    self.pytorch_model.eval()
+                    self.ppo_model = self.pytorch_model
+                    print(f"[{self.__class__.__name__}] Loaded PyTorch BC model from {self.ppo_model_path} successfully!")
+                    return
+                except Exception:
+                    self.pytorch_model = None
+                
                 from stable_baselines3 import PPO
                 self.ppo_model = PPO.load(self.ppo_model_path)
-                print(f"[{self.__class__.__name__}] Loaded PPO model from {self.ppo_model_path} successfully!")
+                print(f"[{self.__class__.__name__}] Loaded SB3 PPO model from {self.ppo_model_path} successfully!")
             except Exception as e:
-                print(f"[{self.__class__.__name__}] Error loading PPO model from {self.ppo_model_path}: {e}")
+                print(f"[{self.__class__.__name__}] Error loading model: {e}")
         else:
-            print(f"[{self.__class__.__name__}] PPO model file not found at {self.ppo_model_path}. Fallback to heuristics.")
+            print(f"[{self.__class__.__name__}] Model file not found at {self.ppo_model_path}. Fallback to heuristics.")
 
     def reset(self):
         self._layout_name = None
@@ -72,13 +98,24 @@ class StudentAgent:
             self._load_ppo_model()
 
     def act(self, obs):
-        # 1. PPO Policy Execution (if model loaded)
+        # 1. Model Policy Execution (if model loaded)
         if self.use_ppo and self.ppo_model is not None:
             try:
                 if isinstance(obs, dict) and "obs" in obs:
                     x = np.asarray(obs["obs"], dtype=np.float32)
                 else:
                     x = np.asarray(obs, dtype=np.float32)
+                
+                # If loaded as raw PyTorch model
+                if getattr(self, "pytorch_model", None) is not None:
+                    import torch
+                    x_tensor = torch.tensor(x, dtype=torch.float32)
+                    with torch.no_grad():
+                        logits = self.pytorch_model(x_tensor)
+                        action = torch.argmax(logits, dim=-1).item()
+                    return int(action)
+                
+                # If loaded as Stable-Baselines3 model
                 action, _states = self.ppo_model.predict(x, deterministic=True)
                 if hasattr(action, "item"):
                     return int(action.item())

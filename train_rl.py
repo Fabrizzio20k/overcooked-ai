@@ -15,12 +15,25 @@ from policies.basic_policies import GreedyFullTaskPolicy
 from src.policy_wrappers import EpsilonActionWrapper
 
 # ── Exact competition scenario definitions ─────────────────────────────────
-SCENARIOS = [
-    # (layout_name,             ingredient, noise)
+# ── Competition scenarios (HIGH priority — 3 envs each) ───────────────────
+COMPETITION = [
     ("asymmetric_advantages",   "onion",    0.00),   # Escenario 1
-    ("coordination_ring",       "onion",    0.25),   # Escenario 2 – sticky actions
-    ("counter_circuit",         "tomato",   0.35),   # Escenario 3 – agent uses tomato, partner uses onion
+    ("coordination_ring",       "onion",    0.25),   # Escenario 2
+    ("counter_circuit",         "tomato",   0.35),   # Escenario 3
 ]
+
+# ── Extra layouts for generalization (LOW priority — 1 env each) ───────────
+EXTRA = [
+    ("cramped_room",            "onion",    0.00),
+    ("forced_coordination",     "onion",    0.00),
+    ("large_room",              "onion",    0.00),
+    ("small_corridor",          "onion",    0.00),
+    ("soup_coordination",       "onion",    0.00),
+    ("corridor",                "onion",    0.00),
+]
+
+# Final list: competition x3 + extras x1  →  15 total envs
+SCENARIOS = (COMPETITION * 3) + EXTRA
 # ──────────────────────────────────────────────────────────────────────────
 
 class CompetitionEnv(gym.Env):
@@ -81,7 +94,7 @@ def train():
     from overcooked_ai_py.planning.planners import (
         MediumLevelActionManager, NO_COUNTERS_PARAMS,
     )
-    for layout, _, _ in SCENARIOS:
+    for layout, _, _ in set(SCENARIOS):
         print(f"  {layout} …")
         mdp = OvercookedGridworld.from_layout_name(layout)
         MediumLevelActionManager.from_pickle_or_compute(

@@ -14,16 +14,17 @@ from overcooked_ai_py.mdp.actions import Action
 from policies.basic_policies import GreedyFullTaskPolicy
 from src.policy_wrappers import EpsilonActionWrapper
 
-# ── Competition scenarios (HIGH priority — 4 envs each = 12 envs) ─────────
-# (layout, agent_ingredient, partner_ingredient, noise)
+# ── Competition scenarios (HIGH priority — 3 envs each = 12 envs) ─────────
+# (layout_or_file, agent_ingredient, partner_ingredient, noise)
+# Use "file:path/to/file.layout" for custom layouts
 COMPETITION = [
-    ("asymmetric_advantages",   "onion",   "onion",   0.00),   # Escenario 1
-    ("coordination_ring",       "onion",   "onion",   0.25),   # Escenario 2
-    ("counter_circuit",         "tomato",  "onion",   0.35),   # Escenario 3
+    ("asymmetric_advantages",              "onion",  "onion",  0.00),   # Escenario 1
+    ("coordination_ring",                  "onion",  "onion",  0.25),   # Escenario 2
+    ("counter_circuit",                    "tomato", "onion",  0.35),   # Escenario 3
+    ("file:configs/layouts/scenario_4.layout", "onion", "onion", 1.00), # Escenario 4 — random_motion partner
 ]
 
 # ── Generalization layouts (LOW priority — 1 env each = 12 envs) ──────────
-# Covers diverse unseen layouts the professor may use in Scenarios 4-6
 EXTRA = [
     ("cramped_room",              "onion",  "onion",  0.00),
     ("forced_coordination",       "onion",  "onion",  0.00),
@@ -39,23 +40,39 @@ EXTRA = [
     ("unident",                   "onion",  "onion",  0.20),
 ]
 
-# competition x4 + extras x1  →  24 total envs
-SCENARIOS = (COMPETITION * 4) + EXTRA
+# competition x3 + extras x1  →  24 total envs
+SCENARIOS = (COMPETITION * 3) + EXTRA
 # ──────────────────────────────────────────────────────────────────────────
 
 class CompetitionEnv(gym.Env):
-    """Gym env that mirrors one of the 3 exact competition scenarios."""
+    """Gym env for competition scenarios — supports named and file-based layouts."""
 
     def __init__(self, env_id: int):
         super().__init__()
         layout, agent_ingredient, partner_ingredient, noise = SCENARIOS[env_id % len(SCENARIOS)]
         self.agent_ingredient = agent_ingredient
 
-        self.mdp = OvercookedGridworld.from_layout_name(
-            layout, old_dynamics=True  # must match evaluation YAMLs
-        )
-        self.base_env = OvercookedEnv.from_mdp(self.mdp, horizon=400)
+        # Support both named layouts and file-based custom layouts
+        if layout.startswith("file:"):
+            import json, re
+            layout_path = layout[5:]  # strip "file:"
+            with open(layout_path) as f:
+                raw = f.read()
+            layout_dict = json.loads(re.sub(r':\s*None', ': null', raw))
+            grid = "\n".join(line.strip() for line in layout_dict["grid"].strip().splitlines())
+            layout_dict.pop("grid")
+            layout_dict["layout_name"] = "scenario_4"
+            self.mdp = OvercookedGridworld.from_grid(
+                layout_grid=grid,
+                base_layout_params=layout_dict,
+                params_to_overwrite={"old_dynamics": True},
+            )
+        else:
+            self.mdp = OvercookedGridworld.from_layout_name(
+                layout, old_dynamics=True
+            )
 
+        self.base_env = OvercookedEnv.from_mdp(self.mdp, horizon=400)
         self.action_space = gym.spaces.Discrete(6)
         self.observation_space = gym.spaces.Box(
             low=-10.0, high=10.0, shape=(96,), dtype=np.float32
@@ -63,12 +80,8 @@ class CompetitionEnv(gym.Env):
 
         base_partner = GreedyFullTaskPolicy(ingredient=partner_ingredient)
         base_partner.set_mdp(self.mdp)
-
         if noise > 0:
-            self.partner = EpsilonActionWrapper(
-                base_partner,
-                random_action_prob=noise,
-            )
+            self.partner = EpsilonActionWrapper(base_partner, random_action_prob=noise)
         else:
             self.partner = base_partner
 
@@ -105,6 +118,8 @@ def train():
         MediumLevelActionManager, NO_COUNTERS_PARAMS,
     )
     for layout, _, _, _ in set(SCENARIOS):
+        if layout.startswith("file:"):
+            continue  # custom file layouts skip pre-computation
         print(f"  {layout} …")
         mdp = OvercookedGridworld.from_layout_name(layout)
         MediumLevelActionManager.from_pickle_or_compute(

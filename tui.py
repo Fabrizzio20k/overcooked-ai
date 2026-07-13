@@ -176,12 +176,7 @@ def main():
             
         scenario = int(choice)
         
-        # Choose Brain
-        print(f"\n{BOLD}Selecciona el Cerebro del Jugador 0 (IA):{RESET}")
-        print(f"  {GREEN}[1]{RESET} {BOLD}Planificación Heurística A*{RESET} (Recomendado para competir - nota más alta)")
-        print(f"  {GREEN}[2]{RESET} {BOLD}Modelo PPO Neuronal (1M pasos){RESET} (Movimientos fluidos, pero baja coordinación con este partner)")
-        brain_choice = input(f"\n{BOLD}Ingresa cerebro (1/2): {RESET}").strip()
-        is_ppo = (brain_choice == '2')
+        is_ppo = True
         
         # Choose mode
         print(f"\n{BOLD}Selecciona el modo de ejecución:{RESET}")

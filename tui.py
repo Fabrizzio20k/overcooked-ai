@@ -186,7 +186,7 @@ def main():
             
         scenario = int(choice)
         
-        is_ppo = (scenario != 4)
+        is_ppo = (scenario not in [3, 4])
         
         # Choose mode
         print(f"\n{BOLD}Selecciona el modo de ejecución:{RESET}")

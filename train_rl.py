@@ -16,20 +16,21 @@ from src.policy_wrappers import EpsilonActionWrapper
 
 # ── Exact competition scenario definitions ─────────────────────────────────
 # ── Competition scenarios (HIGH priority — 3 envs each) ───────────────────
+# (layout, agent_ingredient, partner_ingredient, noise)
 COMPETITION = [
-    ("asymmetric_advantages",   "onion",    0.00),   # Escenario 1
-    ("coordination_ring",       "onion",    0.25),   # Escenario 2
-    ("counter_circuit",         "tomato",   0.35),   # Escenario 3
+    ("asymmetric_advantages",   "onion",   "onion",   0.00),   # Escenario 1
+    ("coordination_ring",       "onion",   "onion",   0.25),   # Escenario 2
+    ("counter_circuit",         "tomato",  "onion",   0.35),   # Escenario 3 — agent=tomato, partner=onion
 ]
 
 # ── Extra layouts for generalization (LOW priority — 1 env each) ───────────
 EXTRA = [
-    ("cramped_room",            "onion",    0.00),
-    ("forced_coordination",     "onion",    0.00),
-    ("large_room",              "onion",    0.00),
-    ("small_corridor",          "onion",    0.00),
-    ("soup_coordination",       "onion",    0.00),
-    ("corridor",                "onion",    0.00),
+    ("cramped_room",            "onion",   "onion",   0.00),
+    ("forced_coordination",     "onion",   "onion",   0.00),
+    ("large_room",              "onion",   "onion",   0.00),
+    ("small_corridor",          "onion",   "onion",   0.00),
+    ("soup_coordination",       "onion",   "onion",   0.00),
+    ("corridor",                "onion",   "onion",   0.00),
 ]
 
 # Final list: competition x3 + extras x1  →  15 total envs
@@ -41,7 +42,8 @@ class CompetitionEnv(gym.Env):
 
     def __init__(self, env_id: int):
         super().__init__()
-        layout, ingredient, noise = SCENARIOS[env_id % len(SCENARIOS)]
+        layout, agent_ingredient, partner_ingredient, noise = SCENARIOS[env_id % len(SCENARIOS)]
+        self.agent_ingredient = agent_ingredient
 
         self.mdp = OvercookedGridworld.from_layout_name(
             layout, old_dynamics=True  # must match evaluation YAMLs
@@ -53,7 +55,7 @@ class CompetitionEnv(gym.Env):
             low=-10.0, high=10.0, shape=(96,), dtype=np.float32
         )
 
-        base_partner = GreedyFullTaskPolicy(ingredient=ingredient)
+        base_partner = GreedyFullTaskPolicy(ingredient=partner_ingredient)
         base_partner.set_mdp(self.mdp)
 
         if noise > 0:
@@ -96,7 +98,7 @@ def train():
     from overcooked_ai_py.planning.planners import (
         MediumLevelActionManager, NO_COUNTERS_PARAMS,
     )
-    for layout, _, _ in set(SCENARIOS):
+    for layout, _, _, _ in set(SCENARIOS):
         print(f"  {layout} …")
         mdp = OvercookedGridworld.from_layout_name(layout)
         MediumLevelActionManager.from_pickle_or_compute(

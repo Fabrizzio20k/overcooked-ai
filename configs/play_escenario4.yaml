@@ -15,8 +15,7 @@ policies:
       ingredient: onion
       avoid_teammate: true
       teammate_aware: true
-      use_ppo: true
-      ppo_model_path: models/ppo_general_agent.zip
+      use_ppo: false
     random_action_prob: 0.0
     max_action_time_ms: 100
     invalid_action: stay
@@ -33,7 +32,7 @@ execution:
   - 67
   swap_agent_positions: false
 observation:
-  type: featurized
+  type: state
   include_agent_index: true
 rendering:
   mode: window

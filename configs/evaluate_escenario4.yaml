@@ -1,0 +1,53 @@
+seed: 67
+mode: evaluation
+environment:
+  layout_name: null
+  layout_file: configs/layouts/scenario_4.layout
+  horizon: 400
+  old_dynamics: true
+policies:
+  agent_0:
+    type: python_class
+    path: policies/final_agent.py
+    class_name: StudentAgent
+    name: final_agent
+    config:
+      ingredient: onion
+      avoid_teammate: true
+      teammate_aware: true
+      use_ppo: true
+      ppo_model_path: models/ppo_general_agent.zip
+    random_action_prob: 0.0
+    max_action_time_ms: 100
+    invalid_action: stay
+    timeout_action: stay
+  agent_1:
+    type: builtin
+    name: greedy_full_task
+    ingredient: onion
+    avoid_teammate: true
+    random_action_prob: 0.0
+    max_action_time_ms: 100
+    invalid_action: stay
+    timeout_action: stay
+execution:
+  num_episodes: 5
+  episode_seeds:
+  - 67
+  - 68
+  - 69
+  - 70
+  - 71
+  swap_agent_positions: true
+observation:
+  type: featurized
+  include_agent_index: true
+rendering:
+  mode: none
+  fps: 0
+  save_gif: false
+logging:
+  output_dir: outputs/evaluation_escenario4
+  save_step_log: true
+  save_episode_summary: true
+  save_trajectory_pickle: false

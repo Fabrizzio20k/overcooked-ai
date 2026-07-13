@@ -34,7 +34,9 @@ def print_menu():
     print(f"     {YELLOW}↳ Evalúa la evasión dinámica de obstáculos.{RESET}")
     print(f" {GREEN}[3]{RESET} {BOLD}Escenario 3{RESET} - Counter Circuit (Recetas Mixtas Tomate+Cebolla)")
     print(f"     {YELLOW}↳ Evalúa la cooperación complementaria de ingredientes.{RESET}")
-    print(f" {RED}[4]{RESET} {BOLD}Salir{RESET}")
+    print(f" {GREEN}[4]{RESET} {BOLD}Escenario 4{RESET} - Custom Layout (Scenario 4)")
+    print(f"     {YELLOW}↳ Mapa personalizado con cebollas.{RESET}")
+    print(f" {RED}[5]{RESET} {BOLD}Salir{RESET}")
     print()
 
 def configure_yaml(file_path, use_ppo):
@@ -157,19 +159,27 @@ def show_evaluation_summary(scenario, results, is_ppo):
             else:
                 print(f" ↳ {GREEN}{BOLD}Nota Estimada: 11-12 (Puestos 12-9 - ¡Clasifica!){RESET}")
 
+    elif scenario == 4:
+        if mean_score == 0:
+            print(f" ↳ {RED}{BOLD}Sin puntaje{RESET} (No se entregaron sopas)")
+        else:
+            soups = mean_score / 20.0
+            print(f" ↳ {GREEN}Sopas promedio estimadas:{RESET} {soups:.1f}")
+            print(f" ↳ {GREEN}{BOLD}Puntaje: {mean_score:.1f}{RESET}")
+
 def main():
     while True:
         clear_screen()
         draw_header()
         print_menu()
         
-        choice = input(f"{BOLD}Ingresa tu opción (1-4): {RESET}").strip()
+        choice = input(f"{BOLD}Ingresa tu opción (1-5): {RESET}").strip()
         
-        if choice == '4':
+        if choice == '5':
             print(f"\n{GREEN}¡Gracias por usar Overcooked-AI Competition Runner! ¡Buena suerte en la entrega! 🍳{RESET}\n")
             break
             
-        if choice not in ['1', '2', '3']:
+        if choice not in ['1', '2', '3', '4']:
             print(f"\n{RED}Opción inválida. Presiona ENTER para continuar...{RESET}")
             input()
             continue

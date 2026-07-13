@@ -15,7 +15,7 @@ policies:
       ingredient: onion
       avoid_teammate: true
       teammate_aware: true
-      use_ppo: false
+      use_ppo: true
       ppo_model_path: ppo_fcp_overcooked.zip
     random_action_prob: 0.0
     max_action_time_ms: 100
@@ -40,7 +40,7 @@ execution:
   - 71
   swap_agent_positions: true
 observation:
-  type: state
+  type: featurized
   include_agent_index: true
 rendering:
   mode: none

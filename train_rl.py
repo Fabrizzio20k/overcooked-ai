@@ -118,7 +118,7 @@ def train():
         policy_kwargs=dict(net_arch=[256, 256]),  # bigger network than default [64, 64]
     )
 
-    total_steps = 3_000_000
+    total_steps = 8_000_000
     print(f"Training ONE general PPO agent on the 3 competition scenarios ({total_steps:,} steps)…")
     model.learn(total_timesteps=total_steps)
     model.save("models/ppo_general_agent")

@@ -81,7 +81,7 @@ def main():
     # Ensure models/ dir exists
     os.makedirs("models", exist_ok=True)
 
-    env = make_vec_env(lambda: GeneralTrainEnv(layout), n_envs=4)
+    env = make_vec_env(lambda: GeneralTrainEnv(layout), n_envs=16)
     model = PPO(
         "MlpPolicy",
         env,

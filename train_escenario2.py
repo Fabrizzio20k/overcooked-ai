@@ -48,7 +48,7 @@ class Escenario2TrainEnv(gym.Env):
         return np.array(obs[self.agent_idx], dtype=np.float32), reward, done, info
 
 def train():
-    env = make_vec_env(lambda: Escenario2TrainEnv(), n_envs=4)
+    env = make_vec_env(lambda: Escenario2TrainEnv(), n_envs=16)
     model = PPO(
         "MlpPolicy",
         env,

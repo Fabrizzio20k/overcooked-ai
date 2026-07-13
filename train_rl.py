@@ -19,7 +19,7 @@ SCENARIOS = [
     # (layout_name,             ingredient, noise)
     ("asymmetric_advantages",   "onion",    0.00),   # Escenario 1
     ("coordination_ring",       "onion",    0.25),   # Escenario 2 – sticky actions
-    ("counter_circuit",         "onion",    0.35),   # Escenario 3 – mixed noise
+    ("counter_circuit",         "tomato",   0.35),   # Escenario 3 – agent uses tomato, partner uses onion
 ]
 # ──────────────────────────────────────────────────────────────────────────
 

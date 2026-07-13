@@ -1,7 +1,7 @@
 seed: 67
 mode: debug
 environment:
-  layout_name: asymmetric_advantages
+  layout_name: coordination_ring
   layout_file: null
   horizon: 400
   old_dynamics: true
@@ -23,10 +23,10 @@ policies:
     timeout_action: stay
   agent_1:
     type: builtin
-    name: greedy_human_model
+    name: greedy_full_task
     ingredient: onion
     avoid_teammate: true
-    random_action_prob: 0.0
+    random_action_prob: 0.25
     max_action_time_ms: 100
     invalid_action: stay
     timeout_action: stay
@@ -40,12 +40,11 @@ observation:
   include_agent_index: true
 rendering:
   mode: window
-  fps: 10
-  window_caption: Overcooked-AI Final Agent
+  fps: 12
+  window_caption: Overcooked-AI Escenario 2
   save_gif: false
-  gif_path: outputs/basic_policies.gif
 logging:
-  output_dir: outputs/basic_policies_run
+  output_dir: outputs/play_escenario2
   save_step_log: true
   save_episode_summary: true
-  save_trajectory_pickle: true
+  save_trajectory_pickle: false

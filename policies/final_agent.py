@@ -1,12 +1,9 @@
-"""Heuristic planning agent for the Overcooked final project.
-
-The runner loads this class through StudentAgentAdapter. It expects observations
-with observation.type: state, because the planner needs raw Overcooked state and
-MDP objects.
+"""Symbolic planning + A* navigation agent with PPO loading support for the Overcooked final project.
 """
 
 from __future__ import annotations
 
+import os
 from heapq import heappop, heappush
 from itertools import count
 from typing import Iterable
@@ -19,7 +16,6 @@ if not hasattr(np, "Inf"):
 from overcooked_ai_py.mdp.actions import Action, Direction
 from overcooked_ai_py.mdp.overcooked_mdp import Recipe
 
-
 ACTION_TO_INDEX = {
     Direction.NORTH: 0,
     Direction.SOUTH: 1,
@@ -29,18 +25,8 @@ ACTION_TO_INDEX = {
     Action.INTERACT: 5,
 }
 
-
 class StudentAgent:
-    """Fast symbolic agent: task planner + A* navigation.
-
-    Priority is intentionally soup-centric:
-    1. Deliver soup already held.
-    2. Use held dish on ready soup.
-    3. Put held ingredient into a pot that can accept it.
-    4. Empty-handed: get dish when soup is ready/cooking soon.
-    5. Empty-handed: bring ingredients to pots.
-    6. Otherwise wait near a useful feature without blocking the teammate.
-    """
+    """Fast symbolic agent with A* navigation and Stable-Baselines3 PPO model loading support."""
 
     def __init__(self, config=None):
         self.config = config or {}
@@ -48,21 +34,75 @@ class StudentAgent:
         self.avoid_teammate = bool(self.config.get("avoid_teammate", True))
         self.teammate_aware = bool(self.config.get("teammate_aware", True))
         self.rng = np.random.default_rng(self.config.get("seed", None))
+        
+        # PPO Configuration
+        self.ppo_model_path = self.config.get("ppo_model_path", "ppo_fcp_overcooked.zip")
+        self.use_ppo = self.config.get("use_ppo", True)  # Use PPO if available and active
+        self.ppo_model = None
+        
+        if self.use_ppo:
+            self._load_ppo_model()
+            
         self._layout_name = None
         self._valid_positions: set[tuple[int, int]] = set()
         self._distance_cache: dict[tuple[tuple[int, int], tuple[int, int]], int] = {}
+        self._teammate_last_pos = None
+        self._teammate_stationary_steps = 0
+        self._last_pot_states = {}
+
+    def _load_ppo_model(self):
+        if os.path.exists(self.ppo_model_path):
+            try:
+                from stable_baselines3 import PPO
+                self.ppo_model = PPO.load(self.ppo_model_path)
+                print(f"[{self.__class__.__name__}] Loaded PPO model from {self.ppo_model_path} successfully!")
+            except Exception as e:
+                print(f"[{self.__class__.__name__}] Error loading PPO model from {self.ppo_model_path}: {e}")
+        else:
+            print(f"[{self.__class__.__name__}] PPO model file not found at {self.ppo_model_path}. Fallback to heuristics.")
 
     def reset(self):
         self._layout_name = None
         self._valid_positions = set()
         self._distance_cache = {}
+        self._teammate_last_pos = None
+        self._teammate_stationary_steps = 0
+        self._last_pot_states = {}
+        if self.use_ppo and self.ppo_model is None:
+            self._load_ppo_model()
 
     def act(self, obs):
+        # 1. PPO Policy Execution (if model loaded)
+        if self.use_ppo and self.ppo_model is not None:
+            try:
+                if isinstance(obs, dict) and "obs" in obs:
+                    x = np.asarray(obs["obs"], dtype=np.float32)
+                else:
+                    x = np.asarray(obs, dtype=np.float32)
+                action, _states = self.ppo_model.predict(x, deterministic=True)
+                if hasattr(action, "item"):
+                    return int(action.item())
+                return int(action)
+            except Exception as e:
+                # If error, fallback to heuristic planner
+                pass
+
+        # 2. Heuristic A* Planner (fallback/alternative)
         try:
             state = obs["state"]
             mdp = obs["mdp"]
             agent_index = int(obs.get("agent_index", 0))
             self._refresh_layout_cache(mdp)
+
+            # Update teammate stationary tracking
+            teammate = state.players[1 - agent_index]
+            if self._teammate_last_pos == teammate.position:
+                self._teammate_stationary_steps += 1
+            else:
+                self._teammate_stationary_steps = 0
+                self._teammate_last_pos = teammate.position
+
+            self._last_pot_states = mdp.get_pot_states(state)
 
             target = self._choose_target(state, mdp, agent_index)
             if target is None:
@@ -74,8 +114,60 @@ class StudentAgent:
             return 4
 
     # ------------------------------------------------------------------
-    # Task planning
+    # Heuristic Task planning & Navigation
     # ------------------------------------------------------------------
+
+    def _spaces_available(self, pot_states) -> int:
+        spaces = 0
+        spaces += 3 * len(pot_states.get("empty", []))
+        for k in range(1, Recipe.MAX_NUM_INGREDIENTS):
+            spaces += (Recipe.MAX_NUM_INGREDIENTS - k) * len(pot_states.get(f"{k}_items", []))
+        return spaces
+
+    def _has_path(self, start: tuple[int, int], target: tuple[int, int], state, agent_index: int) -> bool:
+        if self._is_adjacent(start, target):
+            return True
+        blocked = self._blocked_positions(state, agent_index)
+        if target in self._valid_positions:
+            return self._a_star(start, {target}, blocked) is not None
+        goals = [pos for pos in self._adjacent_positions(target) if pos in self._valid_positions and pos not in blocked]
+        if not goals:
+            return False
+        return self._a_star(start, set(goals), blocked) is not None
+
+    def _reachable_walkable_positions(self, start: tuple[int, int]) -> set[tuple[int, int]]:
+        visited = {start}
+        queue = [start]
+        while queue:
+            curr = queue.pop(0)
+            for direction in Direction.ALL_DIRECTIONS:
+                nxt = Action.move_in_direction(curr, direction)
+                if nxt in self._valid_positions and nxt not in visited:
+                    visited.add(nxt)
+                    queue.append(nxt)
+        return visited
+
+    def _sharing_counters(self, state, mdp, agent_index: int) -> list[tuple[int, int]]:
+        player = state.players[agent_index]
+        teammate = state.players[1 - agent_index]
+        
+        our_component = self._reachable_walkable_positions(player.position)
+        teammate_component = self._reachable_walkable_positions(teammate.position)
+        
+        counters = []
+        for y, row in enumerate(mdp.terrain_mtx):
+            for x, char in enumerate(row):
+                if char == 'X':
+                    counters.append((x, y))
+                    
+        sharing = []
+        for c in counters:
+            neighbors = self._adjacent_positions(c)
+            has_our_neighbor = any(n in our_component for n in neighbors)
+            has_teammate_neighbor = any(n in teammate_component for n in neighbors)
+            if has_our_neighbor and has_teammate_neighbor:
+                sharing.append(c)
+        return sharing
 
     def _choose_target(self, state, mdp, agent_index: int) -> tuple[int, int] | None:
         player = state.players[agent_index]
@@ -85,26 +177,91 @@ class StudentAgent:
         if held is not None:
             held_name = held.name
             if held_name == "soup":
-                return self._best_feature_target(player.position, mdp.get_serving_locations())
+                target = self._best_reachable_feature_target(state, agent_index, mdp.get_serving_locations())
+                if target is not None:
+                    return target
+                # Try placing soup on sharing counter
+                sharing = self._sharing_counters(state, mdp, agent_index)
+                empty_sharing = [c for c in sharing if c in mdp.get_empty_counter_locations(state)]
+                if empty_sharing:
+                    return self._best_reachable_feature_target(state, agent_index, empty_sharing)
+                return None
 
             if held_name == "dish":
                 ready = list(pot_states.get("ready", []))
-                if ready:
-                    return self._best_feature_target(player.position, ready)
                 nearly_ready = list(pot_states.get("cooking", [])) + list(
                     pot_states.get(f"{Recipe.MAX_NUM_INGREDIENTS}_items", [])
                 )
-                return self._best_feature_target(player.position, nearly_ready)
+                
+                target = self._best_reachable_feature_target(state, agent_index, ready + nearly_ready)
+                if target is not None:
+                    reachable_ready = self._best_reachable_feature_target(state, agent_index, ready)
+                    if reachable_ready:
+                        return reachable_ready
+                    return self._best_reachable_feature_target(state, agent_index, nearly_ready)
+                
+                # Cannot reach ready/nearly pots, pass dish via sharing counter
+                if ready or nearly_ready:
+                    sharing = self._sharing_counters(state, mdp, agent_index)
+                    empty_sharing = [c for c in sharing if c in mdp.get_empty_counter_locations(state)]
+                    if empty_sharing:
+                        return self._best_reachable_feature_target(state, agent_index, empty_sharing)
+                        
+                # Fallback to any empty counter
+                empty_counters = mdp.get_empty_counter_locations(state)
+                if empty_counters:
+                    return self._best_reachable_feature_target(state, agent_index, empty_counters)
+                return None
 
             if held_name in {"onion", "tomato"}:
+                # Coordination to avoid blocking partner
+                teammate = state.players[1 - agent_index]
+                teammate_held = None if teammate.held_object is None else teammate.held_object.name
+                
+                teammate_needs = 0
+                if teammate_held in {"onion", "tomato"}:
+                    teammate_needs = 1
+                elif teammate_held is None:
+                    for dispenser in self._ingredient_dispenser_locations(mdp):
+                        if self._is_adjacent(teammate.position, dispenser):
+                            direction = self._direction_from_to(teammate.position, dispenser)
+                            if teammate.orientation == direction:
+                                teammate_needs = 1
+                                break
+                                
+                spaces = self._spaces_available(pot_states)
+                if spaces <= teammate_needs:
+                    # Drop on counter
+                    empty_counters = mdp.get_empty_counter_locations(state)
+                    if empty_counters:
+                        return self._best_reachable_feature_target(state, agent_index, empty_counters)
+                    # Park
+                    parking = self._parking_positions(state, mdp, agent_index)
+                    if parking:
+                        return self._best_reachable_floor_target(state, agent_index, parking)
+                    return None
+
                 pots = self._pots_accepting_ingredients(pot_states)
-                if not pots:
-                    return self._best_feature_target(player.position, mdp.get_empty_counter_locations(state))
-                if self._teammate_can_feed_pot(state, mdp, agent_index, pot_states):
-                    parking = self._best_floor_target(player.position, self._parking_positions(state, mdp, agent_index))
-                    if parking is not None:
-                        return parking
-                return self._best_feature_target(player.position, pots)
+                target = self._best_reachable_feature_target(state, agent_index, pots)
+                if target is not None:
+                    if self._teammate_can_feed_pot(state, mdp, agent_index, pot_states):
+                        parking = self._parking_positions(state, mdp, agent_index)
+                        if parking:
+                            return self._best_reachable_floor_target(state, agent_index, parking)
+                    return target
+                    
+                # Cannot reach accepting pots, pass via sharing counter
+                if pots:
+                    sharing = self._sharing_counters(state, mdp, agent_index)
+                    empty_sharing = [c for c in sharing if c in mdp.get_empty_counter_locations(state)]
+                    if empty_sharing:
+                        return self._best_reachable_feature_target(state, agent_index, empty_sharing)
+
+                # Fallback to any empty counter
+                empty_counters = mdp.get_empty_counter_locations(state)
+                if empty_counters:
+                    return self._best_reachable_feature_target(state, agent_index, empty_counters)
+                return None
 
             return None
 
@@ -122,33 +279,91 @@ class StudentAgent:
         full = list(pot_states.get(f"{Recipe.MAX_NUM_INGREDIENTS}_items", []))
         accepting = self._pots_accepting_ingredients(pot_states)
 
-        if ready:
-            for dish in self._dish_sources(state, mdp):
-                candidates.append((1000 - self._feature_distance(pos, dish), dish))
+        sharing = self._sharing_counters(state, mdp, agent_index)
+        sharing_dishes = [p for p in sharing if p in state.objects and state.objects[p].name == "dish"]
+        sharing_ingredients = [p for p in sharing if p in state.objects and state.objects[p].name == self.ingredient]
 
-            # If a dish is already handled by teammate, start the next soup cycle.
-            if self.teammate_aware and teammate_held == "dish":
-                for ingredient in self._ingredient_sources(state, mdp):
-                    candidates.append((780 - self._feature_distance(pos, ingredient), ingredient))
+        # Count dishes needed
+        teammate_has_dish = (self.teammate_aware and teammate_held == "dish")
+        dishes_on_counter = len(self._counter_objects_by_name(state, "dish"))
+        needed_dishes = (len(ready) + len(cooking)) - (1 if teammate_has_dish else 0) - dishes_on_counter
+
+        # 1. Target sharing dishes if we can reach the pots to deliver soup
+        can_reach_pots = any(self._has_path(pos, pot, state, agent_index) for pot in (ready + cooking))
+        if can_reach_pots:
+            for dish in sharing_dishes:
+                if self._has_path(pos, dish, state, agent_index):
+                    priority = 1100 if ready else 920
+                    candidates.append((priority - self._feature_distance(pos, dish), dish))
+
+        # 2. Target other counter dishes
+        if ready or cooking:
+            for dish in self._counter_objects_by_name(state, "dish"):
+                if dish not in sharing_dishes and self._has_path(pos, dish, state, agent_index):
+                    priority = 1000 if ready else 820
+                    candidates.append((priority - self._feature_distance(pos, dish), dish))
+
+        # 3. Target dish dispensers
+        if needed_dishes > 0:
+            dispensers = list(mdp.get_dish_dispenser_locations())
+            if ready:
+                for dish in dispensers:
+                    if self._has_path(pos, dish, state, agent_index):
+                        candidates.append((1000 - self._feature_distance(pos, dish), dish))
+            elif cooking:
+                for dish in dispensers:
+                    if self._has_path(pos, dish, state, agent_index):
+                        candidates.append((820 - self._feature_distance(pos, dish), dish))
 
         if full:
             for pot in full:
-                candidates.append((900 - self._feature_distance(pos, pot), pot))
+                if self._has_path(pos, pot, state, agent_index):
+                    candidates.append((900 - self._feature_distance(pos, pot), pot))
 
-        if cooking:
-            for dish in self._dish_sources(state, mdp):
-                candidates.append((820 - self._feature_distance(pos, dish), dish))
+        # Check spaces for ingredient coordination
+        teammate_needs = 0
+        if teammate_held in {"onion", "tomato"}:
+            teammate_needs = 1
+        elif teammate_held is None:
+            for dispenser in self._ingredient_dispenser_locations(mdp):
+                if self._is_adjacent(teammate.position, dispenser):
+                    direction = self._direction_from_to(teammate.position, dispenser)
+                    if teammate.orientation == direction:
+                        teammate_needs = 1
+                        break
+                        
+        spaces = self._spaces_available(pot_states)
+        
+        # 4. Target ingredients on sharing counters if we can reach accepting pots
+        can_reach_accepting_pots = any(self._has_path(pos, pot, state, agent_index) for pot in accepting)
+        if can_reach_accepting_pots:
+            for ing in sharing_ingredients:
+                if self._has_path(pos, ing, state, agent_index):
+                    candidates.append((790 - self._feature_distance(pos, ing), ing))
 
-        if accepting:
-            ingredient_priority = 760
-            if self.teammate_aware and teammate_held in {"onion", "tomato"}:
-                ingredient_priority -= 220
-            for ingredient in self._ingredient_sources(state, mdp):
-                candidates.append((ingredient_priority - self._feature_distance(pos, ingredient), ingredient))
+        # 5. Target ingredient sources
+        if accepting and spaces > teammate_needs:
+            # We can also harvest from dispenser to pass over counter if we cannot reach the pots
+            can_pass = False
+            if not can_reach_accepting_pots:
+                empty_sharing = [c for c in sharing if c in mdp.get_empty_counter_locations(state)]
+                if empty_sharing:
+                    can_pass = True
+            
+            if can_reach_accepting_pots or can_pass:
+                ingredient_priority = 760
+                if self.teammate_aware and teammate_held in {"onion", "tomato"}:
+                    ingredient_priority -= 220
+                for ingredient in self._ingredient_sources(state, mdp):
+                    if ingredient not in sharing_ingredients and self._has_path(pos, ingredient, state, agent_index):
+                        candidates.append((ingredient_priority - self._feature_distance(pos, ingredient), ingredient))
 
         if not candidates:
-            idle_targets = list(cooking) + list(ready) + list(mdp.get_dish_dispenser_locations())
-            return self._best_feature_target(pos, idle_targets)
+            # Park to keep critical access paths free
+            parking = self._parking_positions(state, mdp, agent_index)
+            if parking:
+                return self._best_reachable_floor_target(state, agent_index, parking)
+            return None
 
         return max(candidates, key=lambda item: item[0])[1]
 
@@ -194,74 +409,91 @@ class StudentAgent:
         ]
         if strict:
             return strict
-
-        teammate_front = Action.move_in_direction(teammate.position, teammate.orientation)
-        return [
-            pos
-            for pos in self._valid_positions
-            if pos != teammate.position and pos != player.position and pos != teammate_front
-        ]
-
-    def _dish_sources(self, state, mdp) -> list[tuple[int, int]]:
-        return self._counter_objects_by_name(state, "dish") + list(mdp.get_dish_dispenser_locations())
-
-    def _ingredient_sources(self, state, mdp) -> list[tuple[int, int]]:
-        counter_items = self._counter_objects_by_name(state, self.ingredient)
-        dispenser_items = self._ingredient_dispenser_locations(mdp)
-        if counter_items:
-            return counter_items + dispenser_items
-        return dispenser_items
+        return [pos for pos in self._valid_positions if pos != teammate.position and pos != player.position]
 
     def _ingredient_dispenser_locations(self, mdp) -> list[tuple[int, int]]:
-        if self.ingredient == "tomato":
-            locs = list(mdp.get_tomato_dispenser_locations())
-            if locs:
-                return locs
-        onion_locs = list(mdp.get_onion_dispenser_locations())
-        if onion_locs:
-            return onion_locs
+        if self.ingredient == "onion":
+            return list(mdp.get_onion_dispenser_locations())
         return list(mdp.get_tomato_dispenser_locations())
 
-    @staticmethod
-    def _counter_objects_by_name(state, object_name: str) -> list[tuple[int, int]]:
-        return [obj.position for obj in state.objects.values() if obj.name == object_name]
+    def _ingredient_sources(self, state, mdp) -> list[tuple[int, int]]:
+        return self._counter_objects_by_name(state, self.ingredient) + self._ingredient_dispenser_locations(mdp)
 
-    # ------------------------------------------------------------------
-    # Navigation
-    # ------------------------------------------------------------------
+    def _counter_objects_by_name(self, state, name: str) -> list[tuple[int, int]]:
+        res = []
+        for pos, obj in state.objects.items():
+            if obj.name == name:
+                res.append(pos)
+        return res
+
+    def _best_reachable_feature_target(
+        self,
+        state,
+        agent_index: int,
+        targets: Iterable[tuple[int, int]],
+    ) -> tuple[int, int] | None:
+        player = state.players[agent_index]
+        origin = player.position
+        reachable_targets = []
+        for target in targets:
+            if self._has_path(origin, target, state, agent_index):
+                reachable_targets.append(target)
+        if not reachable_targets:
+            return None
+        return min(reachable_targets, key=lambda target: self._feature_distance(origin, target))
+
+    def _best_reachable_floor_target(
+        self,
+        state,
+        agent_index: int,
+        targets: Iterable[tuple[int, int]],
+    ) -> tuple[int, int] | None:
+        player = state.players[agent_index]
+        origin = player.position
+        reachable_targets = []
+        for target in targets:
+            if self._has_path(origin, target, state, agent_index):
+                reachable_targets.append(target)
+        if not reachable_targets:
+            return None
+        return min(reachable_targets, key=lambda target: self._distance_between(origin, target))
 
     def _move_or_interact(self, state, mdp, agent_index: int, target: tuple[int, int]):
         player = state.players[agent_index]
         pos = player.position
-
-        if target in self._valid_positions:
-            if pos == target:
-                return Action.STAY
-            next_pos = self._next_step_to_floor(state, agent_index, target)
-            if next_pos is None:
-                return self._unstuck_action(state, mdp, agent_index)
-            return Action.determine_action_for_change_in_pos(pos, next_pos)
-
         if self._is_adjacent(pos, target):
             direction = self._direction_from_to(pos, target)
             if player.orientation == direction:
                 return Action.INTERACT
             return direction
 
-        next_pos = self._next_step_to_feature(state, mdp, agent_index, target)
-        if next_pos is None:
-            return self._unstuck_action(state, mdp, agent_index)
-        return Action.determine_action_for_change_in_pos(pos, next_pos)
+        nxt = self._next_step_to_feature(state, agent_index, target)
+        if nxt is None:
+            return Action.STAY
+        return self._direction_from_to(pos, nxt)
 
-    def _next_step_to_feature(self, state, mdp, agent_index: int, target: tuple[int, int]) -> tuple[int, int] | None:
+    def _blocked_positions(self, state, agent_index: int) -> set[tuple[int, int]]:
+        blocked = set()
+        teammate = state.players[1 - agent_index]
+        teammate_held = None if teammate.held_object is None else teammate.held_object.name
+        
+        is_teammate_stuck = False
+        if teammate_held in {"onion", "tomato"}:
+            if self._spaces_available(self._last_pot_states) == 0:
+                is_teammate_stuck = True
+        elif teammate_held == "dish":
+            if not self._last_pot_states.get("ready") and not self._last_pot_states.get("cooking"):
+                is_teammate_stuck = True
+                
+        if self._teammate_stationary_steps >= 2 or is_teammate_stuck:
+            blocked.add(teammate.position)
+        return blocked
+
+    def _next_step_to_feature(self, state, agent_index: int, target: tuple[int, int]) -> tuple[int, int] | None:
         player = state.players[agent_index]
         start = player.position
         blocked = self._blocked_positions(state, agent_index)
-        goals = [
-            pos
-            for pos in self._adjacent_positions(target)
-            if pos in self._valid_positions and pos not in blocked
-        ]
+        goals = [pos for pos in self._adjacent_positions(target) if pos in self._valid_positions and pos not in blocked]
         if not goals:
             return None
 
@@ -286,6 +518,8 @@ class StudentAgent:
     ) -> tuple[int, int]:
         player = state.players[agent_index]
         teammate = state.players[1 - agent_index]
+        if self._teammate_stationary_steps >= 1:
+            return preferred
         teammate_front = Action.move_in_direction(teammate.position, teammate.orientation)
         if preferred != teammate_front:
             return preferred
@@ -306,121 +540,65 @@ class StudentAgent:
         goals: set[tuple[int, int]],
         blocked: set[tuple[int, int]],
     ) -> list[tuple[int, int]] | None:
-        serial = count()
+        if start in goals:
+            return [start]
         frontier = []
-        heappush(frontier, (0, next(serial), start))
+        tiebreaker = count()
+        heappush(frontier, (0, next(tiebreaker), start))
         came_from: dict[tuple[int, int], tuple[int, int] | None] = {start: None}
         cost_so_far = {start: 0}
-
+        
         while frontier:
             _, _, current = heappop(frontier)
             if current in goals:
-                return self._reconstruct_path(came_from, current)
-
+                path = []
+                while current is not None:
+                    path.append(current)
+                    current = came_from[current]
+                path.reverse()
+                return path
+                
             for direction in Direction.ALL_DIRECTIONS:
                 nxt = Action.move_in_direction(current, direction)
-                if nxt not in self._valid_positions:
-                    continue
-                if nxt in blocked and nxt not in goals:
+                if nxt not in self._valid_positions or nxt in blocked:
                     continue
                 new_cost = cost_so_far[current] + 1
-                if nxt in cost_so_far and new_cost >= cost_so_far[nxt]:
-                    continue
-                cost_so_far[nxt] = new_cost
-                priority = new_cost + min(self._manhattan(nxt, goal) for goal in goals)
-                heappush(frontier, (priority, next(serial), nxt))
-                came_from[nxt] = current
-
+                if nxt not in cost_so_far or new_cost < cost_so_far[nxt]:
+                    cost_so_far[nxt] = new_cost
+                    priority = new_cost + min(self._manhattan(nxt, goal) for goal in goals)
+                    heappush(frontier, (priority, next(tiebreaker), nxt))
+                    came_from[nxt] = current
         return None
 
-    def _unstuck_action(self, state, mdp, agent_index: int):
-        player = state.players[agent_index]
-        blocked = self._blocked_positions(state, agent_index)
-        options = []
-        for direction in Direction.ALL_DIRECTIONS:
-            nxt = Action.move_in_direction(player.position, direction)
-            if nxt in self._valid_positions and nxt not in blocked:
-                options.append(direction)
-        if not options:
-            return Action.STAY
-        return options[int(self.rng.integers(0, len(options)))]
-
-    def _blocked_positions(self, state, agent_index: int) -> set[tuple[int, int]]:
-        if not self.avoid_teammate:
-            return set()
-        return {player.position for idx, player in enumerate(state.players) if idx != agent_index}
-
-    # ------------------------------------------------------------------
-    # Distances and geometry
-    # ------------------------------------------------------------------
-
     def _refresh_layout_cache(self, mdp):
-        layout_name = getattr(mdp, "layout_name", None)
-        if layout_name == self._layout_name and self._valid_positions:
+        if self._layout_name == mdp.layout_name:
             return
-        self._layout_name = layout_name
+        self._layout_name = mdp.layout_name
         self._valid_positions = set(mdp.get_valid_player_positions())
         self._distance_cache = {}
 
-    def _best_feature_target(
-        self,
-        origin: tuple[int, int],
-        targets: Iterable[tuple[int, int]],
-    ) -> tuple[int, int] | None:
-        targets = list(targets)
-        if not targets:
-            return None
-        return min(targets, key=lambda target: self._feature_distance(origin, target))
-
-    def _best_floor_target(
-        self,
-        origin: tuple[int, int],
-        targets: Iterable[tuple[int, int]],
-    ) -> tuple[int, int] | None:
-        targets = list(targets)
-        if not targets:
-            return None
-        return min(targets, key=lambda target: self._distance_between(origin, target))
-
-    def _feature_distance(self, origin: tuple[int, int], feature: tuple[int, int]) -> int:
-        goals = [pos for pos in self._adjacent_positions(feature) if pos in self._valid_positions]
-        if not goals:
-            return 999
-        return min(self._distance_between(origin, goal) for goal in goals)
-
-    def _distance_between(self, start: tuple[int, int], goal: tuple[int, int]) -> int:
-        key = (start, goal)
-        if key in self._distance_cache:
-            return self._distance_cache[key]
-        path = self._a_star(start, {goal}, blocked=set())
-        dist = 999 if path is None else len(path) - 1
-        self._distance_cache[key] = dist
+    def _distance_between(self, pos1: tuple[int, int], pos2: tuple[int, int]) -> int:
+        pair = (pos1, pos2) if pos1 < pos2 else (pos2, pos1)
+        if pair in self._distance_cache:
+            return self._distance_cache[pair]
+        dist = self._manhattan(pos1, pos2)
+        self._distance_cache[pair] = dist
         return dist
 
-    @staticmethod
-    def _reconstruct_path(came_from, current: tuple[int, int]) -> list[tuple[int, int]]:
-        path = [current]
-        while came_from[current] is not None:
-            current = came_from[current]
-            path.append(current)
-        path.reverse()
-        return path
+    def _feature_distance(self, pos: tuple[int, int], feature: tuple[int, int]) -> int:
+        dists = [self._distance_between(pos, adj) for adj in self._adjacent_positions(feature) if adj in self._valid_positions]
+        return min(dists) if dists else 999
 
-    @staticmethod
-    def _manhattan(a: tuple[int, int], b: tuple[int, int]) -> int:
-        return abs(a[0] - b[0]) + abs(a[1] - b[1])
+    def _adjacent_positions(self, pos: tuple[int, int]) -> list[tuple[int, int]]:
+        return [Action.move_in_direction(pos, d) for d in Direction.ALL_DIRECTIONS]
 
-    @staticmethod
-    def _is_adjacent(a: tuple[int, int], b: tuple[int, int]) -> bool:
-        return abs(a[0] - b[0]) + abs(a[1] - b[1]) == 1
+    def _is_adjacent(self, pos1: tuple[int, int], pos2: tuple[int, int]) -> bool:
+        return self._manhattan(pos1, pos2) == 1
 
-    @staticmethod
-    def _adjacent_positions(pos: tuple[int, int]) -> list[tuple[int, int]]:
-        return [Action.move_in_direction(pos, direction) for direction in Direction.ALL_DIRECTIONS]
+    def _direction_from_to(self, pos1: tuple[int, int], pos2: tuple[int, int]):
+        dx = pos2[0] - pos1[0]
+        dy = pos2[1] - pos1[1]
+        return (dx, dy)
 
-    @staticmethod
-    def _direction_from_to(a: tuple[int, int], b: tuple[int, int]):
-        direction = (b[0] - a[0], b[1] - a[1])
-        if direction not in Direction.ALL_DIRECTIONS:
-            raise ValueError(f"Positions are not adjacent: {a} -> {b}")
-        return direction
+    def _manhattan(self, pos1: tuple[int, int], pos2: tuple[int, int]) -> int:
+        return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])

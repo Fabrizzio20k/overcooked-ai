@@ -1,9 +1,9 @@
 seed: 67
-mode: debug
+mode: evaluation
 environment:
   layout_name: asymmetric_advantages
   layout_file: null
-  horizon: 400
+  horizon: 250
   old_dynamics: true
 policies:
   agent_0:
@@ -15,7 +15,7 @@ policies:
       ingredient: onion
       avoid_teammate: true
       teammate_aware: true
-      use_ppo: true
+      use_ppo: false
       ppo_model_path: ppo_fcp_overcooked.zip
     random_action_prob: 0.0
     max_action_time_ms: 100
@@ -23,7 +23,7 @@ policies:
     timeout_action: stay
   agent_1:
     type: builtin
-    name: greedy_human_model
+    name: greedy_full_task
     ingredient: onion
     avoid_teammate: true
     random_action_prob: 0.0
@@ -31,21 +31,23 @@ policies:
     invalid_action: stay
     timeout_action: stay
 execution:
-  num_episodes: 1
+  num_episodes: 5
   episode_seeds:
   - 67
-  swap_agent_positions: false
+  - 68
+  - 69
+  - 70
+  - 71
+  swap_agent_positions: true
 observation:
-  type: featurized
+  type: state
   include_agent_index: true
 rendering:
-  mode: window
-  fps: 10
-  window_caption: Overcooked-AI Final Agent
+  mode: none
+  fps: 0
   save_gif: false
-  gif_path: outputs/basic_policies.gif
 logging:
-  output_dir: outputs/basic_policies_run
+  output_dir: outputs/evaluation_escenario1
   save_step_log: true
   save_episode_summary: true
-  save_trajectory_pickle: true
+  save_trajectory_pickle: false

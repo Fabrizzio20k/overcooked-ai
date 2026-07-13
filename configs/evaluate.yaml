@@ -1,9 +1,9 @@
 seed: 67
 mode: evaluation
 environment:
-  layout_name: cramped_room
+  layout_name: coordination_ring
   layout_file: null
-  horizon: 250
+  horizon: 400
   old_dynamics: true
 policies:
   agent_0:
@@ -15,6 +15,8 @@ policies:
       ingredient: onion
       avoid_teammate: true
       teammate_aware: true
+      use_ppo: false
+      ppo_model_path: ppo_fcp_overcooked.zip
     random_action_prob: 0.0
     max_action_time_ms: 100
     invalid_action: stay
@@ -24,7 +26,7 @@ policies:
     name: greedy_full_task
     ingredient: onion
     avoid_teammate: true
-    random_action_prob: 0.0
+    random_action_prob: 0.25
     max_action_time_ms: 100
     invalid_action: stay
     timeout_action: stay

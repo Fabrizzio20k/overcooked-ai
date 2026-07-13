@@ -1,7 +1,7 @@
 seed: 67
 mode: debug
 environment:
-  layout_name: asymmetric_advantages
+  layout_name: counter_circuit
   layout_file: null
   horizon: 400
   old_dynamics: true
@@ -12,10 +12,10 @@ policies:
     class_name: StudentAgent
     name: final_agent
     config:
-      ingredient: onion
+      ingredient: tomato
       avoid_teammate: true
       teammate_aware: true
-      use_ppo: true
+      use_ppo: false
       ppo_model_path: ppo_fcp_overcooked.zip
     random_action_prob: 0.0
     max_action_time_ms: 100
@@ -23,10 +23,10 @@ policies:
     timeout_action: stay
   agent_1:
     type: builtin
-    name: greedy_human_model
+    name: greedy_full_task
     ingredient: onion
     avoid_teammate: true
-    random_action_prob: 0.0
+    random_action_prob: 0.35
     max_action_time_ms: 100
     invalid_action: stay
     timeout_action: stay
@@ -36,16 +36,15 @@ execution:
   - 67
   swap_agent_positions: false
 observation:
-  type: featurized
+  type: state
   include_agent_index: true
 rendering:
   mode: window
-  fps: 10
-  window_caption: Overcooked-AI Final Agent
+  fps: 12
+  window_caption: Overcooked-AI Escenario 3
   save_gif: false
-  gif_path: outputs/basic_policies.gif
 logging:
-  output_dir: outputs/basic_policies_run
+  output_dir: outputs/play_escenario3
   save_step_log: true
   save_episode_summary: true
-  save_trajectory_pickle: true
+  save_trajectory_pickle: false

@@ -14,7 +14,7 @@ from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
 from overcooked_ai_py.agents.agent import GreedyHumanModel, RandomAgent
 from overcooked_ai_py.planning.planners import MediumLevelActionManager, NO_COUNTERS_PARAMS
 def evaluate_model():
-    model_path = "models/ppo_fcp_overcooked"
+    model_path = "ppo_fcp_overcooked"
     try:
         model = PPO.load(model_path)
     except Exception as e:
@@ -22,7 +22,7 @@ def evaluate_model():
         return
 
     horizon = 400
-    mdp = OvercookedGridworld.from_layout_name("cramped_room")
+    mdp = OvercookedGridworld.from_layout_name("asymmetric_advantages")
     env = OvercookedEnv.from_mdp(mdp, horizon=horizon)
 
     mlam = MediumLevelActionManager.from_pickle_or_compute(mdp, NO_COUNTERS_PARAMS, force_compute=False)

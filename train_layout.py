@@ -7,6 +7,7 @@ import argparse
 import gym
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.vec_env import SubprocVecEnv
 from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
 from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
 from overcooked_ai_py.agents.agent import RandomAgent, GreedyHumanModel
@@ -81,7 +82,7 @@ def main():
     # Ensure models/ dir exists
     os.makedirs("models", exist_ok=True)
 
-    env = make_vec_env(lambda: GeneralTrainEnv(layout), n_envs=16)
+    env = make_vec_env(lambda: GeneralTrainEnv(layout), n_envs=16, vec_env_cls=SubprocVecEnv)
     model = PPO(
         "MlpPolicy",
         env,

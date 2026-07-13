@@ -5,6 +5,7 @@ np.NaN = np.nan
 import gym
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.vec_env import SubprocVecEnv
 from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
 from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
 from overcooked_ai_py.mdp.actions import Action
@@ -48,7 +49,7 @@ class Escenario3TrainEnv(gym.Env):
         return np.array(obs[self.agent_idx], dtype=np.float32), reward, done, info
 
 def train():
-    env = make_vec_env(lambda: Escenario3TrainEnv(), n_envs=16)
+    env = make_vec_env(lambda: Escenario3TrainEnv(), n_envs=16, vec_env_cls=SubprocVecEnv)
     model = PPO(
         "MlpPolicy",
         env,

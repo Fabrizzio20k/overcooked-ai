@@ -24,8 +24,23 @@ class OvercookedDataset(Dataset):
         self.obs = []
         self.actions = []
         
-        npz_files = glob.glob(os.path.join(data_dir, "**/*.npz"), recursive=True)
-        print(f"Found {len(npz_files)} demonstration files.")
+        all_files = glob.glob(os.path.join(data_dir, "**/*.npz"), recursive=True)
+        print(f"Total demonstration files in data/: {len(all_files)}")
+        
+        target_layouts = [
+            "cramped_room",
+            "asymmetric_advantages",
+            "coordination_ring",
+            "forced_coordination",
+            "counter_circuit"
+        ]
+        
+        npz_files = []
+        for file_path in all_files:
+            if any(tl in file_path.lower() for tl in target_layouts):
+                npz_files.append(file_path)
+                
+        print(f"Filtered to {len(npz_files)} files matching target layouts.")
         
         for file_path in npz_files:
             try:
